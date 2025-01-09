@@ -1,0 +1,235 @@
+using PowerSystems
+using PowerSimulationsDynamics
+using DifferentialEquations  
+
+solver = Tsit5()  # A commonly used solver for differential equations
+
+# Step 1: Define Limits as MinMax
+voltage_limit = (0.9, 1.1)
+power_limit = (0.0, 400.0)
+
+# Step 2: Define ThreePartCost
+CP = ThreePartCost(
+    variable = 1.0, 
+    fixed = 0.0, 
+    start_up = 0.0, 
+    shut_down = 0.0
+)
+
+# Step 3: Define Buses
+bus1 = ACBus(
+    number = 1, 
+    name = "Bus1", 
+    bustype = ACBusTypes.SLACK, 
+    voltage_limits = voltage_limit, 
+    base_voltage = 230.0, 
+    angle = 0.0, 
+    magnitude = 1.0
+)
+
+bus2 = ACBus(
+    number = 2, 
+    name = "Bus2", 
+    bustype = ACBusTypes.PQ, 
+    voltage_limits = voltage_limit, 
+    base_voltage = 230.0, 
+    angle = 0.0, 
+    magnitude = 1.0
+)
+
+Va_lim = (min = -5.0, max = 5.0)  # Define the limits as a named tuple
+Vr_lim = (min = -6.0, max = 6.0)  # Define the exciter voltage limits as a named tuple
+
+genrou_model = ESAC1A(
+    Tr = 0.01,                             # Regulator input filter time constant (0, 0.5)
+    Tb = 0.05,                             # Regulator denominator (lag) time constant (0, 20)
+    Tc = 0.1,                              # Regulator numerator (lead) time constant (0, 20)
+    Ka = 200.0,                            # Regulator output gain (0, 1000)
+    Ta = 0.02,                             # Regulator output time constant (0, 10)
+    Va_lim = Va_lim,                       # Limits for regulator output (Va_min, Va_max)
+    Te = 0.1,                              # Exciter field time constant (eps(), 2)
+    Kf = 0.05,                             # Rate feedback stabilizer gain (0, 0.3)
+    Tf = 0.1,                              # Rate feedback time constant (eps(), 1.5)
+    Kc = 0.9,                              # Rectifier loading factor (0, 1)
+    Kd = 0.5,                              # Demagnetizing factor (0, 1)
+    Ke = 0.8,                              # Exciter field proportional constant (0, 1)
+    E_sat = (1.0, 1.2),                    # Exciter output voltage for saturation factor (E1, E2)
+    Se = (0.05, 0.1),                      # Exciter saturation factor (Se(E1), Se(E2))
+    Vr_lim = Vr_lim,                       # Limits for exciter field voltage (Vr_min, Vr_max)
+    V_ref = 1.0,                           # Reference voltage set-point (0, nothing)
+    saturation_coeffs = (0.9, 0.3),        # Coefficients (A, B) of the Se(x) function
+    ext = Dict{String, Any}(),             # External parameters (leave empty)
+    states = [:Vm, :Vr1, :Vr2, :Ve, :Vr3], # States of the system
+    n_states = 5,                          # Number of states (fixed for ESAC1A)
+    states_types = [
+        StateTypes(1),
+        StateTypes(2),
+        StateTypes(1),
+        StateTypes(2),
+        StateTypes(1)
+    ]
+)
+
+println(typeof(genrou_model))
+# PSS model (placeholder: replace with a specific PSS model if necessary)
+pss_model = nothing  # Replace `DummyPSS()` with the actual PSS model if available
+
+# Define the shaft configuration
+
+shaft = SingleMass(
+    H = 3.5,  # Shaft inertia constant (H)
+    D = 0.01  # Shaft damping coefficient
+)
+# Define a fixed turbine governor (TGFixed)
+turbine_gov = TGFixed(
+    efficiency = 0.95,       # Efficiency of the turbine governor
+    P_ref = 0.9,             # Reference mechanical power output in pu
+    ext = Dict{String, Any}() # Empty dictionary for external parameters
+)
+
+machine_model = BaseMachine(
+    R = 0.01,              # Resistance after EMF (pu)
+    Xd_p = 0.1,            # Reactance after EMF (pu)
+    eq_p = 1.1,            # Fixed EMF behind impedance (pu)
+    ext = Dict{String, Any}(),  # External parameters (leave empty)
+    states = [],           # No states for BaseMachine
+    n_states = 0           # No states for BaseMachine
+)
+
+pss_model = PSSFixed(
+    V_pss = 0.0,                # Fixed voltage stabilization signal
+    ext = Dict{String, Any}(),  # External parameters (leave empty)
+    states = [],                # No states for PSSFixed
+    n_states = 0                # Number of states
+)
+
+# Define the static injector for the dynamic generator
+static_injector = ThermalStandard(
+    name = "Dynamic Generator 1",
+    bus = bus1,                     # Attach to the bus
+    available = true,
+    status = true,                  # Operational status
+    active_power = 90.0,            # Steady-state active power in MW
+    reactive_power = 30.0,          # Steady-state reactive power in MVAr
+    active_power_limits = (min = 0.0, max = 100.0),  # Active power limits
+    reactive_power_limits = (min = -30.0, max = 30.0),  # Reactive power limits
+    ramp_limits = (up = 50.0, down = 50.0),  # Ramp rate limits in MW/min
+    base_power = 100.0,             # Base power in MVA
+    rating = 150.0,                 # Generator rating (MW or MVA)
+    operation_cost = CP,            # Operation cost (defined earlier as ThreePartCost)
+    prime_mover_type = PrimeMovers.ST,  # Prime mover type (e.g., steam turbine)
+    fuel = ThermalFuels.OTHER,         # Fuel type
+    services = Vector{Service}(),      # List of ancillary services
+    time_at_status = 10000.0,          # Time in current status
+    dynamic_injector = nothing,        # Set this to `nothing`
+    ext = Dict{String, Any}()          # External parameters (empty dictionary)
+)
+
+# Define the dynamic generator
+dynamic_gen = DynamicGenerator(
+    name = "Dynamic Generator 1",
+    ω_ref = 314.16,  # Reference angular velocity
+    machine = machine_model,  # Instance of BaseMachine
+    shaft = shaft,  # Instance of SingleMass
+    avr = genrou_model,  # Use the ESAC1A model for AVR
+    prime_mover = turbine_gov,  # TGFixed for turbine governor
+    pss = pss_model,  # Use PSSFixed for the PSS
+    base_power = 100.0,  # Base power in MVA
+    n_states = 5,  # Number of states
+    states = [:Vm, :Vr1, :Vr2, :Ve, :Vr3],  # List of states
+    ext = Dict{String, Any}()  # External parameters (empty dictionary)
+)
+
+
+# Step 5: Define a Load
+load1 = StandardLoad(
+    name = "Load1",
+    available = true,
+    bus = bus2,
+    base_power = 100.0,
+    constant_active_power = 90.0,
+    constant_reactive_power = 30.0
+)
+
+# Step 6: Define a Line (Using Arc and MinMax)
+arc1 = Arc(from = bus1, to = bus2)
+
+line1 = Line(
+    name = "Line1",
+    available = true,
+    active_power_flow = 100.0,
+    reactive_power_flow = 10.0,
+    arc = arc1,
+    r = 0.01,
+    x = 0.05,
+    b = (from = 0.00356, to = 0.00356),
+    rate = 100.0,
+    angle_limits = (min = -0.3, max = 0.3)
+)
+
+# Step 7: Assemble the System
+system = PowerSystems.System(
+    100.0,                  # Base power
+    [bus1, bus2],           # List of buses
+    [static_injector],      # Add static injector first
+    [load1],                # List of loads
+    [line1]                 # List of lines
+)
+
+# Add dynamic generator to the system
+add_component!(
+    system,
+    dynamic_gen,
+    static_injector = static_injector  # Link the static injector
+)
+
+# Check System
+#println("System Summary:")
+#println(system)
+
+#println("System fields:")
+#println(fieldnames(typeof(system)))
+
+#println("System Structure:")
+#println("Buses:", system.data)
+println("Component validation:")
+println(PowerSystems.validate_component(static_injector))
+println(PowerSystems.validate_component(dynamic_gen))
+println(PowerSystems.validate_component(bus1))
+println(PowerSystems.validate_component(bus2))
+println(PowerSystems.validate_component(load1))
+println(PowerSystems.validate_component(line1))
+simulation_type = PowerSimulationsDynamics.ResidualModel
+
+# Step 8: Create Simulation Object
+tspan = (0.0, 10.0)
+initial_conditions = Float64[]
+simulation_folder = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF"
+mkpath(simulation_folder)
+frequency_reference = PowerSimulationsDynamics.ConstantFrequency()
+
+simulation = PowerSimulationsDynamics.Simulation(
+    simulation_type,
+    system,
+    tspan = tspan,
+    initial_conditions = initial_conditions,
+    perturbations = Vector{PowerSimulationsDynamics.Perturbation}(),
+    initialize_simulation = true,
+    console_level = Base.CoreLogging.Info,
+    file_level = Base.CoreLogging.Warn,
+    simulation_folder = simulation_folder,
+    frequency_reference = frequency_reference
+)
+
+println("Simulation Details:")
+println(simulation)
+
+# Step 9: Execute Simulation
+results = PowerSimulationsDynamics.execute!(
+    simulation,
+    solver,
+    enable_progress_bar = true
+)
+
+println("Simulation Results:")
+println(results)
