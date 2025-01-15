@@ -1,0 +1,122 @@
+using PowerSystems
+using PowerSimulations
+using TimeSeries
+using InfrastructureSystems
+using Dates
+using DataStructures
+using Random
+using JuMP
+using Ipopt
+
+# Load the 5-bus system data
+include(".... data_5bus_pu.jl")  # Update with your file path
+resolution = Hour(1)  # 1-hour resolution
+# Export components of the system
+nodes = nodes5()
+lines = branches5(nodes)
+generators = thermal_generators5(nodes)
+loads = loads5(nodes)
+renewables = renewable_generators5(nodes)
+hydro = hydro_generators5(nodes)
+#batteries = battery5(nodes)
+time_series = load_timeseries_DA
+
+system = System(100.0; frequency = 50.0)  # Base power and frequency
+
+foreach(node -> add_component!(system, node), nodes)
+foreach(line -> add_component!(system, line), lines)
+foreach(gen -> add_component!(system, gen), generators)
+foreach(load -> add_component!(system, load), loads)
+foreach(ren -> add_component!(system, ren), renewables)
+foreach(hydro_gen -> add_component!(system, hydro_gen), hydro)
+#foreach(battery -> add_component!(system, battery), batteries)
+println("Integrated sucsess:")
+
+start_time = DateTime("2024-01-01T00:00:00")
+timestamps = collect(start_time:Hour(1):start_time + Hour(23))  # 24 hours
+resolution = Hour(1)  # 1-hour resolution
+
+# Define load values for the time series
+load_values = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+               0.7, 0.8, 0.9, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+
+# Generate time series values (replace these with real data)
+wind_values = [sin(2π * (i / 24)) + 1.5 for i in 0:23]  # Example: daily sine wave for wind
+hydro_values = fill(1.0, 24)  # Example: constant hydro generation
+
+# Create the Deterministic time series
+load_ts = Deterministic(
+    name = "active_power",
+    data = SortedDict(zip(timestamps, [load_values])),
+    resolution = resolution,  # Specify resolution here
+    scaling_factor_multiplier = nothing
+)
+
+wind_ts = Deterministic(
+    name = "wind_power",
+    data = SortedDict(zip(timestamps, [wind_values])),
+    resolution = Hour(1),
+    scaling_factor_multiplier = nothing
+)
+
+hydro_ts = Deterministic(
+    name = "hydro_power",
+    data = SortedDict(zip(timestamps, [hydro_values])),
+    resolution = Hour(1),
+    scaling_factor_multiplier = nothing
+)
+
+# Add time series to the load in the system
+add_time_series!(system, loads[1], load_ts)
+add_time_series!(system, loads[2], load_ts)
+add_time_series!(system, loads[3], load_ts)
+println("Loads time series added succesfully")
+
+add_time_series!(system, renewables[1], wind_ts)
+add_time_series!(system, renewables[2], wind_ts)
+add_time_series!(system, renewables[3], wind_ts)
+println("Wind time series added succesfully")
+
+add_time_series!(system, hydro[1], hydro_ts)
+add_time_series!(system, hydro[2], hydro_ts)
+println("Hydro time series added succesfully")
+
+
+# Define the simulation model
+# Define optimization solver
+optimizer = JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => 1e-6)
+println("Optimizer defined")
+
+# Define the Economic Dispatch template
+template_ed = template_economic_dispatch()
+
+# Create a single decision model for ED
+decision_model_ed = DecisionModel(
+    template_ed,
+    system;
+    name = "ED",
+    optimizer = optimizer,
+    horizon = 24  # 24 hours
+)
+
+println("Economic Dispatch Decision Model created")
+
+sim_models = SimulationModels(;
+    decision_models = [decision_model_ed]
+)
+
+# Define a SimulationSequence without complex feedforwards
+sim_sequence = SimulationSequence(;
+    models = sim_models,
+    ini_cond_chronology = IntraProblemChronology()  # Simple intra-stage sequencing
+)
+
+# Set up and run the simulation
+sim = Simulation(;
+    name = "Simple Simulation",
+    steps = 10,  # Number of simulation steps (e.g., 10 days)
+    models = sim_models,
+    sequence = sim_sequence,
+    initial_time = DateTime("2024-01-01T00:00:00"),
+    simulation_folder = mktempdir(; cleanup = true)
+)
