@@ -8,6 +8,7 @@ using MathOptInterface
 using InfrastructureSystems
 using TimeSeries
 using JuMP
+using Plots
 
 system = System(100.0); # 100 MVA base power
 
@@ -57,7 +58,7 @@ load2 = PowerLoad(;
     max_reactive_power = 0.0,
 );
 
-add_components!(system, [bus1, wind1, load1, load2])
+add_components!(system, [bus1, wind1, load1])#, load2])
 set_units_base_system!(system, "NATURAL_UNITS")
 
 #Add time series wind
@@ -92,7 +93,7 @@ load_time_series = SingleTimeSeries(
     data = load_timearray
 )
 add_time_series!(system, load1, load_time_series)
-add_time_series!(system, load2, load_time_series)
+#add_time_series!(system, load2, load_time_series)
 
 load_forecast_data = Dict(
     DateTime("2020-01-01T08:00:00") => [0.3, 0.3, 0.3, 0.3, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6],
@@ -112,18 +113,21 @@ load1_forecast = Deterministic(
 add_time_series!(system, load1, load1_forecast)
 
 # Create forecast for `load2`
+#=
 load2_forecast = Deterministic(
     name = "max_active_power",
     data = load_forecast_data,
     resolution = forecast_resolution
 )
 add_time_series!(system, load2, load2_forecast)
-
+=#
 println("Time series for load1:")
 println(show_time_series(load1))
 
+#=
 println("Time series for load2:")
 println(show_time_series(load2))
+=#
 system
 
 print("try to solve")
@@ -156,4 +160,35 @@ println("Decision model created.")
 output_dir = mktempdir()
 println("Building model in directory: $output_dir")
 build!(problem; output_dir = output_dir)
+solve!(problem)
 println("Model built successfully.")
+# Extract the results from the decision model
+res = OptimizationProblemResults(problem)
+println("STATISTICS:")
+get_optimizer_stats(res)
+println("OBJECTIVE VALUES:")
+get_objective_value(res)
+println("LIST:")
+list_parameter_names(res)
+println("READ PARAMETERS:")
+read_parameter(res, "ActivePowerTimeSeriesParameter__RenewableDispatch")
+println(fieldnames(typeof(res)))
+println(res.variable_values)
+println(res.parameter_values)
+
+# Extract actual generated power (wind1) from variable values
+generated_power = res.variable_values[InfrastructureSystems.Optimization.VariableKey{ActivePowerVariable, RenewableDispatch}("")][:, :wind1]
+
+# Extract actual consumed power (load1) from parameter values
+consumed_power = res.parameter_values[InfrastructureSystems.Optimization.ParameterKey{ActivePowerTimeSeriesParameter, PowerLoad}("")][:, :load1]
+
+# Extract timestamps (assuming equal intervals for simplicity)
+timestamps = range(DateTime("2020-01-01T08:00:00"), step=Minute(5), length=length(generated_power))
+plot(timestamps, generated_power,
+     label = "Generated Power (MW)",
+     xlabel = "Time",
+     ylabel = "Power (MW)",
+     title = "Generated vs Consumed Power")
+
+plot!(timestamps, -consumed_power,  # Negate since loads are negative
+      label = "Consumed Power (MW)")
