@@ -7,6 +7,7 @@ using Dates
 using MathOptInterface
 using InfrastructureSystems
 using TimeSeries
+using JuMP
 
 system = System(100.0); # 100 MVA base power
 
@@ -81,22 +82,57 @@ add_time_series!(system, wind1, wind_forecast);
 
 #Add time seris load
 load_values = [0.3, 0.3, 0.3, 0.3, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6,
-           0.7, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8];
-load_timearray = TimeArray(timestamps, load_values);
+               0.7, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8]
+timestamps = range(DateTime("2020-01-01T08:00:00"), step=Dates.Minute(5), length=24)
 
-load_time_series = SingleTimeSeries(; name = "max_active_power", data = load_timearray, scaling_factor_multiplier = get_max_active_power,);
-add_time_series!(system, [load1, load2], load_time_series);
-#=
+load_timearray = TimeArray(timestamps, load_values)
+
+load_time_series = SingleTimeSeries(
+    name = "max_active_power",
+    data = load_timearray
+)
+add_time_series!(system, load1, load_time_series)
+add_time_series!(system, load2, load_time_series)
+
+load_forecast_data = Dict(
+    DateTime("2020-01-01T08:00:00") => [0.3, 0.3, 0.3, 0.3, 0.4, 0.4, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6],
+    DateTime("2020-01-01T08:30:00") => [0.6, 0.6, 0.7, 0.7, 0.7, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.8],
+    DateTime("2020-01-01T09:00:00") => [0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.9, 0.9, 0.9, 0.8, 0.8]
+)
+
+# Define the resolution for the forecast
+forecast_resolution = Dates.Minute(5)
+
+# Create forecast for `load1`
+load1_forecast = Deterministic(
+    name = "max_active_power",
+    data = load_forecast_data,
+    resolution = forecast_resolution
+)
+add_time_series!(system, load1, load1_forecast)
+
+# Create forecast for `load2`
+load2_forecast = Deterministic(
+    name = "max_active_power",
+    data = load_forecast_data,
+    resolution = forecast_resolution
+)
+add_time_series!(system, load2, load2_forecast)
+
 println("Time series for load1:")
 println(show_time_series(load1))
 
 println("Time series for load2:")
 println(show_time_series(load2))
+system
 
-println("Components in the system:")
-println(system)
-=#
 print("try to solve")
+solver = optimizer_with_attributes(
+    HiGHS.Optimizer,
+    "presolve" => "on",           # Enable presolve
+    "time_limit" => 300.0         # Set a time limit of 300 seconds
+)
+println("Solver configured.")
 template_uc = ProblemTemplate()
 set_device_model!(template_uc, Line, StaticBranch)
 set_device_model!(template_uc, Transformer2W, StaticBranch)
@@ -109,19 +145,15 @@ set_device_model!(template_uc, RenewableNonDispatch, FixedOutput)
 set_service_model!(template_uc, VariableReserve{ReserveUp}, RangeReserve)
 set_service_model!(template_uc, VariableReserve{ReserveDown}, RangeReserve)
 set_network_model!(template_uc, NetworkModel(CopperPlatePowerModel))
-
-solver = optimizer_with_attributes(HiGHS.Optimizer, "mip_rel_gap" => 0.5)
-MathOptInterface.OptimizerWithAttributes(HiGHS.Optimizer, Pair{MathOptInterface.AbstractOptimizerAttribute, Any}[MathOptInterface.RawOptimizerAttribute("mip_rel_gap") => 0.5])
-problem = DecisionModel(template_uc, system; optimizer = solver, horizon = Hour(1))
-println(problem)
-
-build!(problem; output_dir = mktempdir())
-#=
-#InfrastructureSystems.Optimization.ModelBuildStatusModule.ModelBuildStatus.BUILT = 0
-solve!(problem)
-#InfrastructureSystems.Simulation.RunStatusModule.RunStatus.SUCCESSFULLY_FINALIZED = 0
-res = OptimizationProblemResults(problem)
-get_optimizer_stats(res)
-get_objective_value(res)
-list_parameter_names(res)
-=#
+println("Problem template configured.")
+problem = DecisionModel(
+    template_uc,
+    system;
+    optimizer = solver,
+    horizon = Hour(1)  # 1-hour horizon
+)
+println("Decision model created.")
+output_dir = mktempdir()
+println("Building model in directory: $output_dir")
+build!(problem; output_dir = output_dir)
+println("Model built successfully.")
