@@ -246,14 +246,14 @@ line2 = Line(;
 add_components!(system,[bus1, bus2, bus3, line1, line2, wind1, load1,load2, gas])
 system
 
-power_data_load = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load_power_data.csv";  # Replace with actual file path
-forecast_data_load = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load_forecast_data.csv";
+power_data_load = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load_power_data.csv";  # Replace with actual file path
+forecast_data_load = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load_forecast_data.csv";
 
-power_data_wind = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/wind_power_data.csv";  # Replace with actual file path
-forecast_data_wind = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/wind_forecast_data.csv";
+power_data_wind = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/wind_power_data.csv";  # Replace with actual file path
+forecast_data_wind = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/wind_forecast_data.csv";
 
-power_data_load2 = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load2_power_data.csv";  # Replace with actual file path
-forecast_data_load2 = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load2_forecast_data.csv";
+power_data_load2 = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load2_power_data.csv";  # Replace with actual file path
+forecast_data_load2 = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load2_forecast_data.csv";
 
 #Get time time series and forecast for load
 load_time_series, load_forecast_series = create_time_and_forecast_series(power_data_load, forecast_data_load, Dates.Minute(5))

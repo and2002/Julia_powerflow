@@ -1,5 +1,6 @@
 using PowerSystems
 using PowerSimulations
+using StorageSystemsSimulations
 using HydroPowerSimulations
 using PowerSystemCaseBuilder
 using HiGHS # solver
@@ -201,13 +202,13 @@ storage1 = EnergyReservoirStorage(
     bus = bus3,
     prime_mover_type = PrimeMovers.BA,  # Example prime mover type
     storage_technology_type = StorageTech.LIB,  # Battery storage type
-    storage_capacity = 50000.0,  # 100 MWh capacity
+    storage_capacity = 500.0,  # 100 MWh capacity
     storage_level_limits = (min = 0.1, max = 1.0),  # Min and max storage levels (10% to 100%)
-    initial_storage_capacity_level = 0.5,  # Initially 50% full
-    rating = 500.0,  # Max output power rating (MW)
+    initial_storage_capacity_level = 0.11,  # Initially 50% full
+    rating = 100.0,  # Max output power rating (MW)
     active_power = 0.0,  # Initial active power (MW)
-    input_active_power_limits = (min = 0.0, max =200.0),  # Charging limits (MW)
-    output_active_power_limits = (min = 0.0, max = 200.0),  # Discharging limits (MW)
+    input_active_power_limits = (min = 0.0, max =50.0),  # Charging limits (MW)
+    output_active_power_limits = (min = 0.0, max = 50.0),  # Discharging limits (MW)
     efficiency = (in = 0.95, out = 0.95),  # Charging/discharging efficiencies
     reactive_power = 0.0,  # Initial reactive power (MVAR)
     reactive_power_limits = (min = -10.0, max = 10.0),  # Reactive power limits (MVAR)
@@ -269,14 +270,14 @@ line2 = Line(;
 add_components!(system,[bus1, bus2, bus3, line1, line2, wind1, load1,load2, gas, storage1])
 
 
-power_data_load = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load_power_data.csv";  # Replace with actual file path
-forecast_data_load = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load_forecast_data.csv";
+power_data_load = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load_power_data.csv";  # Replace with actual file path
+forecast_data_load = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load_forecast_data.csv";
 
-power_data_wind = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/wind_power_data.csv";  # Replace with actual file path
-forecast_data_wind = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/wind_forecast_data.csv";
+power_data_wind = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/wind_power_data.csv";  # Replace with actual file path
+forecast_data_wind = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/wind_forecast_data.csv";
 
-power_data_load2 = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load2_power_data.csv";  # Replace with actual file path
-forecast_data_load2 = "C:/Users/andre/Desktop/Julia_code_main_directory/results_of_tests_OPF/load2_forecast_data.csv";
+power_data_load2 = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load2_power_data.csv";  # Replace with actual file path
+forecast_data_load2 = "C:/Users/andrey.gorbunov/Sienna/Andrei_experiments/Julia_powerflow/3_bus_case/load2_forecast_data.csv";
 
 #Get time time series and forecast for load
 load_time_series, load_forecast_series = create_time_and_forecast_series(power_data_load, forecast_data_load, Dates.Minute(5))
@@ -308,6 +309,7 @@ template_uc = ProblemTemplate()
 set_device_model!(template_uc, Line, StaticBranch)
 set_device_model!(template_uc, Transformer2W, StaticBranch)
 set_device_model!(template_uc, TapTransformer, StaticBranch)
+
 set_device_model!(template_uc, ThermalStandard, ThermalStandardUnitCommitment)
 set_device_model!(template_uc, RenewableDispatch, RenewableFullDispatch)
 set_device_model!(template_uc, PowerLoad, StaticPowerLoad)
@@ -317,6 +319,20 @@ set_service_model!(template_uc, VariableReserve{ReserveUp}, RangeReserve)
 set_service_model!(template_uc, VariableReserve{ReserveDown}, RangeReserve)
 set_network_model!(template_uc, NetworkModel(CopperPlatePowerModel))
 println("Problem template configured.")
+
+
+# Addition of storage model
+storage_model = DeviceModel(
+    EnergyReservoirStorage,
+    StorageDispatchWithReserves;
+    attributes=Dict(
+        "reservation" => true,
+        "energy_target" => false,
+        "cycling_limits" => false,
+        "regulatization" => true,
+    ),
+)
+set_device_model!(template_uc, storage_model)
 
 # Step 2: Create the Decision Model
 problem = DecisionModel(
@@ -364,6 +380,9 @@ println(h5file)
 renewable_dispatch_data = read(h5file["/simulation/decision_models/GenericOpProblem/variables/ActivePowerVariable__RenewableDispatch"]);
 load_dispatch_data = read(h5file["/simulation/decision_models/GenericOpProblem/parameters/ActivePowerTimeSeriesParameter__PowerLoad"]);
 thermal_dispatch_data =  read(h5file["/simulation/decision_models/GenericOpProblem/variables/ActivePowerVariable__ThermalStandard"])
+renewable_with_battery_in = read(h5file["/simulation/decision_models/GenericOpProblem/variables/ActivePowerInVariable__EnergyReservoirStorage"]) 
+renewable_with_battery_out = read(h5file["/simulation/decision_models/GenericOpProblem/variables/ActivePowerOutVariable__EnergyReservoirStorage"])
+
 
 start_time = DateTime("2023-06-01T00:00:00")
 resolution = Minute(5)  # 5-minute resolution
@@ -373,9 +392,14 @@ time_line1,data_dispatch_wind = data_for_plotting(renewable_dispatch_data, 1, st
 time_line2,data_dispatch_load1 = data_for_plotting(load_dispatch_data, 2, start_time,steps,resolution,base_power)
 time_line3,data_dispatch_thermal = data_for_plotting(thermal_dispatch_data, 1, start_time,steps,resolution,base_power)
 time_line4,data_dispatch_load2 = data_for_plotting(load_dispatch_data, 1, start_time,steps,resolution,base_power)
+time_line5,data_storage_in = data_for_plotting(renewable_with_battery_in, 1, start_time,steps,resolution,base_power)
+time_line6,data_storage_out = data_for_plotting(renewable_with_battery_out, 1, start_time,steps,resolution,base_power)
 #plotting
 
 plot(time_line1,data_dispatch_wind, xrotation = 90, xlabel="Time", ylabel="Power (MW)", label="wind")
 plot!(time_line2,data_dispatch_load1, label = "load1")
 plot!(time_line4,data_dispatch_load2, label = "load2")
 plot!(time_line3,data_dispatch_thermal, label = "thermal")
+
+plot(time_line5,data_storage_in, label = "storage_in", xrotation = 90, xlabel="Time", ylabel="Power (MW)")
+plot!(time_line6, data_storage_out, label = "storage_out")
