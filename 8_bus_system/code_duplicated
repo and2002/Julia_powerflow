@@ -15,6 +15,31 @@ using DataFrames
 using HDF5
 
 # Functions
+function system_info(system:: PowerSystems.System)
+
+    println("SYSTEM CONFIGURATION:")
+    renewables = get_components(RenewableDispatch, system)
+    for (i, gen) in enumerate(renewables)
+        println("Renewable Generator $i: ", gen.name)
+    end
+
+    generators = get_components(ThermalStandard, system)
+    for (i, gen) in enumerate(generators)
+        println("Generator $i: ", gen.name)
+    end
+
+    loads = get_components(PowerLoad, system)
+    for (i, element) in enumerate(loads)
+        println("Load $i: ", element.name)
+    end
+
+    transformers = get_components(Transformer2W, system)
+    for (i, element) in enumerate(transformers)
+        println("Transformer $i: ", element.name)
+    end
+    println()
+end
+
 function dispatch_to_array(dispatch_data::Array{Float64, 3}, start_time::DateTime, resolution::Period, base_power::Float64)
     # Number of intervals (horizons) and time steps
     num_steps, _, num_intervals = size(dispatch_data)
@@ -442,7 +467,7 @@ add_time_series!(system, wind1, wind_forecast_series)
 add_time_series!(system, load2, load2_time_series)
 add_time_series!(system, load2, load2_forecast_series)
 
-system
+system_info(system)
 
 print("try to solve")
 solver = optimizer_with_attributes(
