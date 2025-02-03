@@ -1,3 +1,4 @@
+# This file creates same system and saves it as json. Also, it has function system_info, which allows to see all omponents of defined types added to system
 using PowerSystems
 using PowerModels
 using PowerSimulations
