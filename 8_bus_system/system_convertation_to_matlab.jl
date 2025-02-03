@@ -1,3 +1,4 @@
+# This code takes the system as json and converts it to matlab format. Note: battery is treated as load or as generator. depends on vector. vecotr hasformat listed in code
 using PowerModels
 using PowerSystems
 using Ipopt
