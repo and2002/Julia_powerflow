@@ -1,3 +1,4 @@
+#load json, replaces batteries, converts to matpower, saves. Then case by case verification (to be done)
 using PowerModels
 using PowerSystems
 using Ipopt
