@@ -1,3 +1,4 @@
+# creates 3 bus system, saves json, solves optimization
 using PowerSystems
 using PowerSimulations
 using HydroPowerSimulations
