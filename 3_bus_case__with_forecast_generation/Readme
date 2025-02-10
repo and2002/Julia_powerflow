@@ -1,0 +1,6 @@
+Thi set of programs allows to convert CSV documnet with time series data to forecast CSV with specified horison and scaling. forecast data is a bit noisy, but reproduces the trend. sequence of actions:
+1: give raw CSV with time series to Rescales_time_series
+2: set system using 3bus_ssystem_def, which is based on forecasts created before
+3: solution of optimization problem is saved as DF XXXX CSV files along with system as json and as well as picutres with plots
+4: Run load_3_bus_case_and_run_OPF: code will load json file, convert it to MATPOWER, save and then reload parsing batteries as gnerator+load. Using solution from previous stage as refenece, it creates step by step verification and record sthe summary as AC_solution
+5: plot the results using Plot_AC_results
