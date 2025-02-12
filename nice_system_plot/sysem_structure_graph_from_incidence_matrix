@@ -1,0 +1,71 @@
+using CSV, DataFrames, Graphs, GraphPlot, Colors
+
+# Load the CSV file
+file_path = "C:/Users/andre/Desktop/Julia_code_main_directory/Incidence_matrix/Network_matrix.csv"  # Change to your actual file path
+df = CSV.read(file_path, DataFrame)
+
+# Define column indices: [Zone_Name, Zone_Number, Line_Number, Start_Zone, End_Zone, Edge_Length]
+column_indices = [1, 2, 3, 4, 5, 6]  
+
+# Dynamically extract the correct columns
+Zone_Name = df[!, column_indices[1]]
+Zone_Number = df[!, column_indices[2]]
+Line_Number = df[!, column_indices[3]]
+Start_Zone = df[!, column_indices[4]]
+End_Zone = df[!, column_indices[5]]
+Edge_Length = df[!, column_indices[6]]
+
+# Function to extract numeric part from "a21", "a35", etc.
+strip_first_char(s) = parse(Int, s[2:end])  
+
+# Convert Zone_Number to integers
+Zone_Number = strip_first_char.(Zone_Number)
+
+# Extract unique zones and create a mapping
+zones = unique(vcat(Start_Zone, End_Zone))
+zone_index = Dict(z => i for (i, z) in enumerate(zones))
+
+# Extract edges (transmission lines)
+edges = [(zone_index[Start_Zone[i]], zone_index[End_Zone[i]]) for i in 1:length(Start_Zone)]
+edge_lengths = Edge_Length  # Use extracted edge lengths
+
+# Create a directed graph
+g = SimpleDiGraph(length(zones))
+
+# Add edges with weights
+for i in 1:length(edges)
+    start_node, end_node = edges[i]
+    add_edge!(g, start_node, end_node)
+end
+
+# **Fixing Zone Labels**
+zone_name_dict = Dict(Zone_Number[i] => Zone_Name[i] for i in 1:length(Zone_Name))
+node_labels = [get(zone_name_dict, zones[i], string(zones[i])) for i in 1:length(zones)]
+
+# Convert labels to string explicitly
+node_labels = string.(node_labels)
+
+x_pos, y_pos = spring_layout(g)
+
+# Step 2: Adjust Positions Using Edge Lengths**
+for i in 1:length(edges)
+    start_node, end_node = edges[i]  # Fixed variable naming
+    length_factor = edge_lengths[i] / maximum(edge_lengths)  # Normalize edge length
+
+    # Move the end_node further away based on edge length
+    x_pos[end_node] = x_pos[start_node] + (x_pos[end_node] - x_pos[start_node]) * length_factor
+    y_pos[end_node] = y_pos[start_node] + (y_pos[end_node] - y_pos[start_node]) * length_factor
+end
+
+# Assign node colors
+node_colors = [RGB(0.4, 0.6, 0.8) for _ in 1:nv(g)]
+edge_colors = [RGB(0.6, 0, 0)]
+
+# Final gplot Call with Edge Length Scaling**
+gplot(g, 
+    x_pos, y_pos,  # Adjusted positions
+    nodelabel=node_labels,  
+    nodefillc=node_colors,  
+    edgestrokec=edge_colors,  
+    edgelabel=edge_lengths  # Show edge lengths
+)
