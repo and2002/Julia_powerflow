@@ -1,4 +1,4 @@
-using CSV, DataFrames, Graphs, GraphPlot, Colors
+using CSV, DataFrames, Graphs, GraphPlot, Colors, LinearAlgebra, Random
 
 # Load the CSV file
 file_path = "C:/Users/andre/Desktop/Julia_code_main_directory/Incidence_matrix/Network_matrix.csv"  # Change to your actual file path
@@ -45,27 +45,51 @@ node_labels = [get(zone_name_dict, zones[i], string(zones[i])) for i in 1:length
 # Convert labels to string explicitly
 node_labels = string.(node_labels)
 
-x_pos, y_pos = spring_layout(g)
-
-# Step 2: Adjust Positions Using Edge Lengths**
+# **📌 Step 1: Use Spring Layout as Initial Guess**
+x_pos, y_pos = spring_layout(g, C = 3.0)  # Unpack X and Y positions
+scaling_factor = 1.0
+angle_adjustment = pi/6
+# **📌 Step 2: Adjust Positions Using Edge Lengths**
 for i in 1:length(edges)
-    start_node, end_node = edges[i]  # Fixed variable naming
+    start_node, end_node = edges[i]
     length_factor = edge_lengths[i] / maximum(edge_lengths)  # Normalize edge length
 
-    # Move the end_node further away based on edge length
-    x_pos[end_node] = x_pos[start_node] + (x_pos[end_node] - x_pos[start_node]) * length_factor
-    y_pos[end_node] = y_pos[start_node] + (y_pos[end_node] - y_pos[start_node]) * length_factor
+    # Compute displacement vector
+    dx = (x_pos[end_node] - x_pos[start_node]) * length_factor * scaling_factor
+    dy = (y_pos[end_node] - y_pos[start_node]) * length_factor * (scaling_factor / 2)  # Less vertical stretch
+
+    # Compute current angle
+    θ = atan(dy, dx)
+
+    # Rotate by an adjustment angle
+    θ_new = θ + angle_adjustment
+    dx_new = sqrt(dx^2 + dy^2) * cos(θ_new)
+    dy_new = sqrt(dx^2 + dy^2) * sin(θ_new)
+
+    # Apply new position with adjusted angle
+    x_pos[end_node] = x_pos[start_node] + dx_new
+    y_pos[end_node] = y_pos[start_node] + dy_new
 end
+
+# Improve Readability by Adjusting Layout**
+plot_size = (20cm,20cm)  # Use Measures.Length for correct format
+nodelabelsize = 10  # Make node labels readable
+edgelabelsize = 8  # Edge length labels should be slightly smaller
+nodelabeldist = 1.5  # Push labels away from nodes to avoid overlap
 
 # Assign node colors
 node_colors = [RGB(0.4, 0.6, 0.8) for _ in 1:nv(g)]
-edge_colors = [RGB(0.6, 0, 0)]
+edge_colors = [RGB(0, 0, 0)]
 
-# Final gplot Call with Edge Length Scaling**
+# Final gplot Call with Optimized Layout**
 gplot(g, 
-    x_pos, y_pos,  # Adjusted positions
+    x_pos, y_pos,  # Pass x and y positions separately
     nodelabel=node_labels,  
     nodefillc=node_colors,  
     edgestrokec=edge_colors,  
-    edgelabel=edge_lengths  # Show edge lengths
+    edgelabel=edge_lengths,  # Show edge lengths
+    plot_size=plot_size,  # Make plot larger
+    nodelabelsize=nodelabelsize,  
+    edgelabelsize=edgelabelsize,  
+    nodelabeldist=nodelabeldist  # Push labels away from nodes
 )
