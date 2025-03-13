@@ -70,20 +70,34 @@ function final_bs_optimization(network_data, initial_Bs; max_iter=50, tolerance=
 
     # Objective Function (Minimize Total Bs)
     function objective_function(Bs_vec, grad)
-        for (i, b) in enumerate(keys(network_data["bus"]))
-            network_data["bus"][b]["bs"] = Bs_vec[i]
-        end
-        result = solve_opf(network_data, ACPPowerModel, Ipopt.Optimizer)
-
-        # Enhanced penalty to guide toward feasibility
-        penalty = 0.0
-        if result["termination_status"] != MathOptInterface.OPTIMAL
-            penalty += 1000  # Stronger penalty for infeasibility
-        end
-
-        return sum(Bs_vec) + penalty
+    # Update Bs values in the network
+    for (i, b) in enumerate(keys(network_data["bus"]))
+        network_data["bus"][b]["bs"] = Bs_vec[i]
     end
 
+    # Run OPF with updated Bs
+    result = solve_opf(network_data, ACPPowerModel, Ipopt.Optimizer)
+
+    # Adaptive penalty system
+    penalty = 0.0
+    if result["termination_status"] != MathOptInterface.OPTIMAL
+        for (g, gen_data) in result["solution"]["gen"]
+            q_actual = gen_data["qg"]
+            q_min = network_data["gen"][g]["qmin"]
+            q_max = network_data["gen"][g]["qmax"]
+
+            # Penalize deviation from limits
+            if q_actual < q_min
+                penalty += abs(q_min - q_actual)  # Exceeded lower limit
+            elseif q_actual > q_max
+                penalty += abs(q_actual - q_max)  # Exceeded upper limit
+            end
+        end
+    end
+
+    # Objective: Minimize total Bs + scaled penalty
+    return sum(Bs_vec) + 10 * penalty
+    end
     # NLopt Setup
     opt = Opt(:LN_COBYLA, length(initial_Bs_vec))  
     opt.lower_bounds = lb
