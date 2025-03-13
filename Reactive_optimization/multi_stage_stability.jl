@@ -25,23 +25,32 @@ function increase_generator_limits!(network_data)
     end
 end
 
-# Step 3: Identify Initial Bs Values Based on Generator Q Stress
+# Step 3: Identify Initial Bs Values Based on Generator Q Output and Limits
 function determine_initial_bs(network_data, feasible_result)
     initial_Bs = Dict{String, Float64}()
 
     for (gen_id, gen) in network_data["gen"]
         q_actual = feasible_result["solution"]["gen"][gen_id]["qg"]
-        q_limit = gen["qmax"]
+        q_max = gen["qmax"]
+        q_min = gen["qmin"]
         bus_id = string(gen["gen_bus"])
 
-        ΔQ = abs(q_actual - q_limit)
+        # Determine ΔQ directly (including correct sign)
+        if q_actual > 0  # Positive Q → Check proximity to Qmax
+            ΔQ = q_actual - q_max
+        elseif q_actual < 0  # Negative Q → Check proximity to Qmin
+            ΔQ = q_actual - q_min
+        else
+            ΔQ = 0.0  # Balanced condition
+        end
+
+        # Assign Bs to reflect proper compensation direction
         initial_Bs[bus_id] = ΔQ / (1.0)^2  # Assume V = 1 p.u. for simplicity
     end
 
-    println("📊 Initial `Bs` Vector Based on Expanded Q Limits: ", initial_Bs)
+    println("📊 Corrected `Bs` Vector Based on Generator Q Output and Limits: ", initial_Bs)
     return initial_Bs
 end
-
 # Step 4: Final Optimization Near Initial Bs Values
 function final_bs_optimization(network_data, initial_Bs; max_iter=50, tolerance=1e-5)
     initial_Bs_vec = [initial_Bs[string(b)] for b in keys(network_data["bus"])]
