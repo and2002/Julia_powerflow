@@ -25,39 +25,33 @@ function increase_generator_limits!(network_data)
     end
 end
 
-# Step 3: Identify Initial Bs Values Based on Generator Q Output and Limits
 function determine_initial_bs(network_data, feasible_result)
-    total_ΔQ = 0.0
-    generator_buses = Set{String}()
+    initial_Bs = Dict{String, Float64}()
 
-    # Step 1: Calculate total ΔQ only for generator buses
+    # Step 1: Assign calculated Bs only for generator buses
     for (gen_id, gen) in network_data["gen"]
         q_actual = feasible_result["solution"]["gen"][gen_id]["qg"]
-        q_max = gen["qmax"]
         q_min = gen["qmin"]
+        q_max = gen["qmax"]
         bus_id = string(gen["gen_bus"])
 
-        # Track generator buses for compensation placement
-        push!(generator_buses, bus_id)
-
-        # Determine required ΔQ for this generator bus
-        if q_actual > 0  # Positive Q → Check proximity to Qmax
-            ΔQ = q_actual - q_max
-        elseif q_actual < 0  # Negative Q → Check proximity to Qmin
-            ΔQ = q_actual - q_min
+        if q_actual < 0
+            ΔQ = q_min - q_actual   # Negative Q requires capacitive compensation
         else
-            ΔQ = 0.0
+            ΔQ = q_actual - q_max   # Positive Q requires inductive compensation
         end
 
-        # Accumulate total ΔQ
-        total_ΔQ += abs(ΔQ)
+        initial_Bs[bus_id] = max(ΔQ, 0.0) / 1.0^2  # Assume V = 1 p.u.
     end
 
-    # Step 2: Spread total ΔQ across all buses (even distribution)
-    num_buses = length(network_data["bus"])
-    initial_Bs = Dict(b => total_ΔQ / num_buses for b in keys(network_data["bus"]))
+    # Step 2: Set zero Bs for all non-generator buses
+    for b in keys(network_data["bus"])
+        if !haskey(initial_Bs, b)
+            initial_Bs[b] = 0.0
+        end
+    end
 
-    println("📊 Improved Initial `Bs` Vector (Based on Spread Q Demand): ", initial_Bs)
+    println("📊 Initial `Bs` Vector Based on Expanded Q Limits: ", initial_Bs)
     return initial_Bs
 end
 
