@@ -72,3 +72,31 @@ for branch_id in slack_branch_ids
     println("Branch $branch_id: slack = $slack_display")
 end
 
+
+# === Step 1: Apply slack upgrades to network ===
+for (i, branch_id) in enumerate(slack_branch_ids)
+    slack_val = JuMP.value(result.ext[:branch_slacks][branch_id])
+    if isnan(slack_val)
+        println("Warning: slack for branch $branch_id not defined (NaN)")
+        continue
+    end
+
+    # Update network["branch"][branch_id]["rate_a"]
+    branch_key = string(branch_id)
+    old_rate = network["branch"][branch_key]["rate_a"]
+    network["branch"][branch_key]["rate_a"] = old_rate + slack_val
+    println("Updated Branch $branch_id rate_a: $old_rate → $(old_rate + slack_val)")
+end
+
+# === Step 2: Solve classical AC OPF on modified network ===
+classic_result = PowerModels.solve_opf(
+    network,
+    ACPPowerModel,
+    Ipopt.Optimizer
+)
+
+println("\n=== Classic OPF on Modified Network ===")
+println("Objective: ", classic_result["objective"])
+for (bid, data) in classic_result["solution"]["branch"]
+    println("Branch $bid: pf = $(data["pf"]), qf = $(data["qf"])")
+end
