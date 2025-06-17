@@ -208,6 +208,14 @@ for (load_id, load_data) in network_data["load"]
     qd = load_data["qd"]
     println("Bus $bus (Load ID $load_id): P = $pd p.u., Q = $qd p.u.")
 end
+
+primal_status = JuMP.primal_status(result.model)
+println("Primal Status: $primal_status")
+objective = JuMP.objective_value(result.model)
+println("Objective Value: $objective")
+time_in_ms = Dates.value(time_finish - time_start) / 1e3
+println("timing: ", time_in_ms)
+
 #println(network_data_copy)
 classic_result = PowerModels.solve_opf(
     network_data_copy,
