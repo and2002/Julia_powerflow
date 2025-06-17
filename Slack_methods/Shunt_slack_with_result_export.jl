@@ -200,6 +200,14 @@ for (branch_id, ((bus_a, bus_b), (bus_b_rev, bus_a_rev))) in branch_map
     println("    Q_in  = $q_in   →   Q_out = $q_out")
 end
 
+println("\n=== Bus Load Summary ===")
+
+for (load_id, load_data) in network_data["load"]
+    bus = load_data["load_bus"]
+    pd = load_data["pd"]
+    qd = load_data["qd"]
+    println("Bus $bus (Load ID $load_id): P = $pd p.u., Q = $qd p.u.")
+end
 #println(network_data_copy)
 classic_result = PowerModels.solve_opf(
     network_data_copy,
