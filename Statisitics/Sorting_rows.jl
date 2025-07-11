@@ -1,7 +1,21 @@
 using DataFrames, Statistics
-function split_by_row_sign( # function takes data frame and tolerance; formes three datasets: positive, negative, mixed
-    df::DataFrame; # data frame
-    threshold::Float64 = 1e-6 # tolerance
+function threshold_zero(df::DataFrame; threshold::Float64 = 1e-6)
+    col_range = names(df)[2:end-1]  # exclude first and last columns
+
+    for col in col_range
+        for i in 1:nrow(df)
+            val = df[i, col]
+            if !ismissing(val) && abs(val) < threshold
+                df[i, col] = 0.0
+            end
+        end
+    end
+
+    return df
+end
+
+function split_by_row_sign( # function takes data frame; formes three datasets: positive, negative, mixed
+    df::DataFrame
 )
     col_range = names(df)[2:end-1]  # exclude first and last columns
 
@@ -11,16 +25,15 @@ function split_by_row_sign( # function takes data frame and tolerance; formes th
 
     for row in eachrow(df)
         vals = [row[c] for c in col_range]
-        values = map(x -> abs(x) < threshold ? 0.0 : x, vals)
 
-        has_pos = any(x -> x > 0, values)
-        has_neg = any(x -> x < 0, values)
+        has_pos = any(x -> x > 0, vals)
+        has_neg = any(x -> x < 0, vals)
 
         if has_pos && has_neg
             push!(df_mix, row)
         elseif has_pos
             push!(df_pos, row)
-        elseif has_neg || all(x -> x == 0, values)
+        elseif has_neg || all(x -> x == 0, vals)
             push!(df_neg, row)
         end
     end
@@ -88,8 +101,8 @@ df = DataFrame(ID = 1:5,
                A = [0.0000001, -2.0, 3.0, -1e-7, 1.5],
                B = [1.0, -1.0, 0.0, 2.0, -3.0],
                Label = ["a", "b", "c", "d", "e"])
-
-df_pos, df_neg, df_mix = split_by_row_sign(df, threshold=1e-6)
+df_filtered = threshold_zero(df, threshold = 1e-3)
+df_pos, df_neg, df_mix = split_by_row_sign(df_filtered)
 
 println("Positive:")
 display(df_pos)
