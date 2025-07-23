@@ -1,0 +1,43 @@
+{
+    "name": "",
+    "description": "",
+    "frequency": 50,
+    "time_series_resolutions_milliseconds": [
+    ],
+    "component_counts": [
+        {
+            "type": "ACBus",
+            "count": 8
+        },
+        {
+            "type": "Arc",
+            "count": 7
+        },
+        {
+            "type": "EnergyReservoirStorage",
+            "count": 1
+        },
+        {
+            "type": "Line",
+            "count": 5
+        },
+        {
+            "type": "PowerLoad",
+            "count": 2
+        },
+        {
+            "type": "RenewableDispatch",
+            "count": 2
+        },
+        {
+            "type": "ThermalStandard",
+            "count": 1
+        },
+        {
+            "type": "Transformer2W",
+            "count": 2
+        }
+    ],
+    "time_series_counts": [
+    ]
+}
